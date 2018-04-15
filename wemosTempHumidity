@@ -1,0 +1,171 @@
+//http://www.esp8266learning.com/wemos-webserver-example.php
+
+#include <ESP8266WiFi.h>
+#include "DHT.h"
+#define DHTPIN D2 
+#define DHTTYPE DHT11
+DHT dht(DHTPIN, DHTTYPE);
+const char* ssid = "";
+const char* password = "";
+ 
+int ledPin = D1;
+WiFiServer server(80);
+ 
+void setup() {
+  Serial.begin(115200);
+  delay(10);
+  
+  
+  Serial.println("DHTxx test!");
+
+  dht.begin();
+ 
+  pinMode(ledPin, OUTPUT);
+  digitalWrite(ledPin, LOW);
+ 
+  // Connect to WiFi network
+  Serial.println();
+  Serial.println();
+  Serial.print("Connecting to ");
+  Serial.println(ssid);
+ 
+  WiFi.begin(ssid, password);
+ 
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("");
+  Serial.println("WiFi connected");
+ 
+  // Start the server
+  server.begin();
+  Serial.println("Server started");
+ 
+  // Print the IP address
+  Serial.print("Use this URL : ");
+  Serial.print("http://");
+  Serial.print(WiFi.localIP());
+  Serial.println("/");
+ 
+}
+ 
+void loop() {
+  delay(2000);
+  // Check if a client has connected
+  float h = dht.readHumidity();
+  float t = dht.readTemperature();
+  float f = dht.readTemperature(true);
+
+  if (isnan(h) || isnan(t) || isnan(f)) {
+    Serial.println("Failed to read from DHT sensor!");
+    return;
+  }
+  // Compute heat index in Fahrenheit (the default)
+  float hif = dht.computeHeatIndex(f, h);
+  // Compute heat index in Celsius (isFahreheit = false)
+  float hic = dht.computeHeatIndex(t, h, false);
+  Serial.print("Humidity: ");
+  Serial.print(h);
+  Serial.print(" %\t");
+  Serial.print("Temperature: ");
+  Serial.print(t);
+  Serial.print(" *C ");
+  Serial.print(f);
+  Serial.print(" *F\t");
+  Serial.print("Heat index: ");
+  Serial.print(hic);
+  Serial.print(" *C ");
+  Serial.print(hif);
+  Serial.println(" *F");
+  
+  WiFiClient client = server.available();
+  if (!client) {
+    return;
+  }
+ 
+  // Wait until the client sends some data
+  Serial.println("new client");
+  while(!client.available()){
+    delay(1);
+  }
+ 
+  // Read the first line of the request
+  String request = client.readStringUntil('\r');
+  Serial.println(request);
+  client.flush();
+ 
+  // Match the request
+ 
+  int value = LOW;
+  if (request.indexOf("/LED=ON") != -1) {
+    digitalWrite(ledPin, HIGH);
+    value = HIGH;
+  } 
+  if (request.indexOf("/LED=OFF") != -1){
+    digitalWrite(ledPin, LOW);
+    value = LOW;
+  }
+ 
+ 
+ 
+  // Return the response
+  client.println("HTTP/1.1 200 OK");
+  client.println("Content-Type: text/html");
+  client.println(""); //  do not forget this one
+  client.println("<!DOCTYPE HTML>");
+  client.println("<html>");
+ 
+  //client.print("Led pin is now: ");
+ 
+  if(value == HIGH) {
+    client.print("On");  
+  } else {
+    client.print("Off");
+  }
+  
+  client.println("<style> h1{border: solid black 2px;background-color: black;color: white;text-align: center;font-variant: small-caps;font-style: cursive;}");
+  client.println(".houseInfo{  height: 200px;  width: 75%;}");
+  client.println(".tableTop{  border: solid grey 2px;  background-color: grey;   color:white;  width: 300px;  font-size: 2em;}");
+  client.println(".UM{  border: solid grey 2px;  background-color: black;   color:white;  font-size: 1.4em;}");
+  client.println(".temp{  border: solid grey 2px;  background-color: red;  color: black;  font-size: 1.4em;}");
+  client.println(".humidity{  border: solid grey 2px;  background-color: Indigo;  color: white;  font-size: 1.4em;}");
+  client.println(".heatIndex{  border: solid grey 2px;  background-color: lightblue;  color: black;  font-size: 1.4em;}");
+  client.println("p{  color:red;  font-family: cursive;  font-size: 30px;}");
+  client.println("</style>");
+  client.println("<center><h1>House Information</h1></center>");
+  client.println("<h1>House Temperature and Humidity Info</h1>");
+  client.println("<center><table class='houseInfo'>");
+  client.println("<tr class='tableTop'>");
+  client.println("    <th>Unit of Measure</th><th>Temperature</th><th>Humidity</th><th>Heat Index</th></tr>");
+  client.println("<tr><td class='UM'>Fahrenheit</td><td class='temp'>");
+  client.println(f);//temperature variable
+  client.println("</td>");
+  client.println("<td class='humidity'>");
+  client.println(h);//Humidity variable
+  client.println("% </td>");
+  client.println("<td class='heatIndex'>");
+  client.println(hif);//Fahrenheit Heat Index Variable
+  client.println("</td>");
+  client.println("</tr><tr><td class='UM'>Celsius</td>");
+  client.println("<td class='temp'>");
+  client.println(t);//Celsius Temp variable
+  client.println("</td>");
+  client.println("<td class='humidity'>");
+  client.println(h);//Humidity variable
+  client.println("%</td>");
+  client.println("<td class='heatIndex'>");
+  client.println(hic);//Celsius Heat Index Variable
+  client.println("</td>");
+  client.println("</tr></table></center>");
+  client.println("<br><br>");  
+  client.println("<center><a href=\"/LED=ON\">Turn ON LED Here</a></center><br>");
+  client.println("<center><p> Wemos is Badass</p></center><br>");
+  client.println("<center> <a href=\"/LED=OFF\">Turn OFF LED Here</a></center><br>");
+  client.println("</html>");
+ 
+  delay(1);
+  Serial.println("Client disconnected");
+  Serial.println("");
+ 
+}
